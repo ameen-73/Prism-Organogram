@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PRISM Foundation - Interactive Organogram</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+        
+        :root {
+            --primary: #4f46e5;
+            --secondary: #10b981;
+            --accent: #f59e0b;
+            --bg-app: #7c7c7c;
+        }
+
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            overflow-x: auto; 
+            background-color: #e6e6e6;
+            background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+            background-size: 20px 20px;
+            color: #1e293b;
+        }
+        
+        /* Zoom & Scaling Mechanics */
+        .zoom-out { transform: scale(0.9); transform-origin: top center; }
+        .zoom-in { transform: scale(1); transform-origin: top center; }
+        
+        .connector-line { background: #8b8b8b; }
+
+        /* Responsive Visibility & Width Overrides */
+        @media (max-width: 1250px) {
+            #mainContainer { transform: scale(1) !important; width: 100% !important; min-width: 0 !important; }
+            .desktop-only { display: none !important; }
+            .mobile-only { display: block !important; }
+        }
+
+        @media (min-width: 1251px) {
+            .mobile-only { display: none !important; }
+            .desktop-only { display: flex !important; }
+        }
+
+        /* Portfolio Items */
+        .portfolio-item { 
+            font-size: 11px; padding: 10px; border-radius: 8px; 
+            background: white; border: 1px solid #e2e8f0; 
+            margin-top: 6px; width: 100%; position: relative; 
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .portfolio-item:hover {
+            border-color: #cbd5e1;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            transform: translateY(-1px);
+        }
+        
+        /* Directorate Cards */
+        .directorate-item { 
+            font-size: 11px; padding: 16px; border-radius: 12px; 
+            background: white; border: 1px solid #e2e8f0; 
+            font-weight: 800; text-transform: uppercase; 
+            text-align: center; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); 
+            width: 100%; position: relative; 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        /* Sub Departments */
+        .sub-dept-item { 
+            font-size: 10px; padding: 8px 12px; border-radius: 6px; 
+            background: #ffffff; border: 1px solid #f1f5f9; 
+            margin-top: 6px; font-weight: 600; color: #475569; 
+            width: 100%; text-align: left; position: relative;
+            transition: all 0.2s ease;
+        }
+
+        .sub-dept-item:hover {
+            background-color: #f8fafc;
+            border-color: #cbd5e1;
+        }
+
+        .category-body { transition: all 0.2s ease; }
+        .category-body.hidden { display: none; }
+        .category-toggle-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 56px;
+            height: 30px;
+            padding: 0 0.75rem;
+            border-radius: 9999px;
+            border: 1px solid rgba(148, 163, 184, 0.4);
+            background: white;
+            color: #334155;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+        }
+        .category-toggle-btn:hover {
+            background-color: #f8fafc;
+            border-color: #cbd5e1;
+        }
+
+        .header-logo { height: 80px; width: auto; }
+        
+        /* Edit Mode Styles */
+        .edit-mode [contenteditable="true"] { 
+            outline: 2px dashed #10b981; 
+            background-color: rgba(16, 185, 129, 0.05); 
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+        
+        .admin-btn { 
+            display: none; 
+            cursor: pointer; 
+            border-radius: 50%; 
+            width: 22px; 
+            height: 22px; 
+            font-size: 12px; 
+            align-items: center; 
+            justify-content: center; 
+            position: absolute; 
+            z-index: 50; 
+            color: white; 
+            border: none; 
+            font-weight: bold;
+            transition: transform 0.2s ease;
+        }
+        .admin-btn:hover {
+            transform: scale(1.15);
+        }
+        .edit-mode .admin-btn { display: inline-flex; }
+        .delete-btn { background: #ef4444; right: -8px; top: -8px; }
+        .add-sub-btn { background: #10b981; right: -8px; bottom: -8px; }
+
+        /* Search Highlight effects */
+        .highlight-node {
+            box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.4) !important;
+            border-color: #4f46e5 !important;
+            transform: scale(1.05) translateY(-3px) !important;
+            z-index: 10;
+        }
+        .fade-node {
+            opacity: 0.3;
+        }
+    </style>
+</head>
+<body class="pb-32 min-h-screen">
+
+    <!-- Floating Interactive Top Console -->
+    <header class="sticky top-0 bg-white/90 backdrop-blur-md border-b border-slate-200 z-[100] px-6 py-3.5 flex flex-wrap gap-4 items-center justify-between shadow-sm">
+        <div class="flex items-center gap-3">
+            <span class="bg-indigo-600 text-white font-black text-sm px-3 py-1.5 rounded-lg tracking-wider shadow-sm shadow-indigo-200">PRISM</span>
+            <span class="text-xs font-bold text-slate-500 uppercase tracking-widest hidden sm:inline">Interactive Console</span>
+        </div>
+
+        <!-- Search Bar (Aesthetic View Mode superpower) -->
+        <div class="flex-1 max-w-sm mx-4">
+            <div class="relative">
+                <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                </span>
+                <input type="text" id="nodeSearch" oninput="handleSearch(this.value)" placeholder="Search departments, units, coordinators..." class="w-full pl-9 pr-4 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-slate-700">
+            </div>
+        </div>
+
+        <div id="controls" class="flex items-center gap-2">
+            <!-- Summary Dashboard Toggle -->
+            <button onclick="toggleDashboard()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 h-9 px-3 rounded-lg text-xs font-bold uppercase flex items-center gap-1.5 transition-all">
+                <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                Stats
+            </button>
+            <!-- Edit Toggle -->
+            <button onclick="toggleEditMode()" id="editBtn" class="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white h-9 px-4 rounded-lg shadow-sm font-bold text-xs uppercase transition-all">
+                <svg id="editIcon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                <span id="editText">Edit Mode</span>
+            </button>
+            <!-- Zoom Toggle -->
+            <button onclick="toggleZoom()" id="zoomBtn" class="bg-white hover:bg-slate-50 text-slate-700 h-9 px-4 rounded-lg shadow-sm border border-slate-200 font-bold text-xs uppercase hidden lg:flex items-center gap-1.5 transition-all">
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                <span id="zoomText">Full View</span>
+            </button>
+            <!-- Portable Actions (JSON) -->
+            <button onclick="exportData()" class="bg-slate-800 hover:bg-slate-900 text-white h-9 px-3 rounded-lg shadow-sm text-xs font-semibold uppercase flex items-center gap-1 transition-all" title="Export configuration to JSON">
+                Export
+            </button>
+            <button onclick="triggerImport()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 h-9 px-3 rounded-lg shadow-sm text-xs font-semibold uppercase flex items-center gap-1 transition-all" title="Import JSON config">
+                Import
+            </button>
+            <input type="file" id="importInput" class="hidden" accept=".json" onchange="importData(event)" />
+        </div>
+    </header>
+
+    <!-- Side Drawer Stats Panel -->
+    <div id="statsPanel" class="fixed top-[65px] right-0 h-[calc(100vh-65px)] w-80 bg-white shadow-2xl border-l border-slate-200 z-[90] translate-x-full transition-transform duration-300 p-6 flex flex-col justify-between">
+        <div>
+            <div class="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
+                <h4 class="font-extrabold text-sm text-slate-900 uppercase tracking-wider">Foundation Statistics</h4>
+                <button onclick="toggleDashboard()" class="text-slate-400 hover:text-slate-600 text-lg">&times;</button>
+            </div>
+            <div class="space-y-4">
+                <div class="p-4 bg-indigo-50/50 rounded-xl border border-indigo-100/50">
+                    <span class="block text-[10px] uppercase font-bold text-indigo-500 tracking-wider">Core Cabinet Scale</span>
+                    <span class="text-2xl font-black text-indigo-900" id="statCore">0</span>
+                </div>
+                <div class="p-4 bg-emerald-50/50 rounded-xl border border-emerald-100/50">
+                    <span class="block text-[10px] uppercase font-bold text-emerald-500 tracking-wider">Active Portfolio Items</span>
+                    <span class="text-2xl font-black text-emerald-900" id="statPortfolios">0</span>
+                </div>
+                <div class="p-4 bg-amber-50/50 rounded-xl border border-amber-100/50">
+                    <span class="block text-[10px] uppercase font-bold text-amber-500 tracking-wider">Directorate Clusters</span>
+                    <span class="text-2xl font-black text-amber-900" id="statClusters">0</span>
+                </div>
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-200/50">
+                    <span class="block text-[10px] uppercase font-bold text-slate-500 tracking-wider">Total Sub-department Units</span>
+                    <span class="text-2xl font-black text-slate-900" id="statSubs">0</span>
+                </div>
+            </div>
+        </div>
+        <div class="text-[10px] font-medium text-slate-400 text-center uppercase tracking-widest border-t border-slate-100 pt-4">
+            PRISM Organogram Engine
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div id="mainContainer" class="zoom-out transition-all duration-500 w-full">
+        <div class="lg:min-w-[1550px] flex flex-col items-center px-4 pt-8 lg:pt-12">
+            
+            <!-- Logo & Title Section -->
+            <div class="mb-14 text-center flex flex-col items-center">
+                <!-- Gorgeous Inline vector PRISM Logo -->
+                <img src="/Asset15.png">
+                <h1 class="text-3xl lg:text-5xl font-[900] text-slate-900 uppercase tracking-tight" id="orgTitle" contenteditable="true" onblur="saveTitle(this.innerText)">PRISM Foundation</h1>
+                <p class="text-indigo-600 font-extrabold uppercase tracking-[0.3em] text-[11px] mt-2">Foundation Organogram & Unit Structure</p>
+            </div>
+
+            <!-- Management Chain (Shared Desktop & Mobile) -->
+            <div id="topChain" class="flex flex-col items-center mb-12 w-full max-w-lg lg:max-w-none"></div>
+
+            <!-- Desktop View Connector Logic -->
+            <div class="desktop-only w-full flex flex-col items-center">
+                <!-- Stem from Central Cabinet to horizontal bar -->
+                <div class="w-px h-10 connector-line"></div>
+                
+                <!-- Main Executive Horizontal Distribution bar -->
+                <div class="relative w-[85%] flex justify-center">
+                    <div class="h-px w-full connector-line"></div>
+                    <div class="absolute top-0 left-0 w-px h-10 connector-line"></div>
+                    <div class="absolute top-0 left-1/4 w-px h-10 connector-line"></div>
+                    <div class="absolute top-0 left-2/4 w-px h-10 connector-line"></div>
+                    <div class="absolute top-0 left-3/4 w-px h-10 connector-line"></div>
+                    <div class="absolute top-0 right-0 w-px h-10 connector-line"></div>
+                </div>
+
+                <!-- Executive Core Layer -->
+                <div class="flex justify-between w-[85%] mt-10 items-start">
+                    
+                    <!-- Left Branch: Chairman -->
+                    <div class="flex flex-col items-center w-1/4">
+                        <div class="w-64 p-5 border bg-white rounded-2xl text-center shadow-md font-extrabold text-sm uppercase text-emerald-600 border-emerald-100 hover:shadow-lg transition-all" id="node-chairman">
+                            Chairman
+                        </div>
+                        <div class="w-px h-3 connector-line"></div>
+                        <div class="w-56 p-4 border bg-white rounded-xl text-center shadow-sm font-bold text-xs uppercase text-emerald-500 border-emerald-50 hover:shadow-md transition-all" id="node-vicechairman">
+                            Vice Chairman
+                        </div>
+                    </div>
+                    
+                    <!-- Middle Left: General Convener -->
+                    <div class="flex flex-col items-center w-1/4">
+                        <div class="w-64 p-5 border bg-white rounded-2xl text-center shadow-md font-extrabold text-sm uppercase text-amber-600 border-amber-100 hover:shadow-lg transition-all" id="node-generalconvener">
+                            General Convener
+                        </div>
+                        <!-- Drop connector stem from General Convener -->
+                        <div class="w-px h-20 connector-line mt-0"></div>
+                    </div>
+                    
+                    <!-- Middle Right: Finance Convener -->
+                    <div class="flex flex-col items-center w-1/4">
+                        <div class="w-64 p-5 border bg-white rounded-2xl text-center shadow-md font-extrabold text-sm uppercase text-sky-600 border-sky-100 hover:shadow-lg transition-all" id="node-financeconvener">
+                            Finance Convener
+                        </div>
+                    </div>
+                    
+                    <!-- Right Branch: Operational Management -->
+                    <div class="flex flex-col items-center w-1/4" id="node-operationalmanager">
+                        <div class="w-64 p-5 border bg-indigo-600 text-white rounded-2xl text-center shadow-lg font-extrabold text-sm uppercase border-indigo-700 hover:bg-indigo-700 transition-all">
+                            Operational Manager
+                        </div>
+                        <!-- Drop connector stem from Operational Manager -->
+                        <div class="w-px h-20 connector-line mt-0"></div>
+                    </div>
+                </div>
+
+                <!-- Interactive Connectors for Lower Portfolios (Aligned exactly to the 4 visual columns) -->
+                <div class="w-[85%] relative">
+                    <div class="absolute top-0 left-0 w-full h-10 pointer-events-none">
+                        <!-- General Convener horizontal branch (links Columns 1, 2, and 3 centers) -->
+                        <div class="absolute top left-[12.5%] right-[37.5%] h-px connector-line"></div>
+                        <!-- Vertical drops for General Convener Portfolios (A, B, C) -->
+                        <div class="absolute top-0 left-[12.5%] w-px h-10 connector-line"></div>
+                        <div class="absolute top-0 left-[37.5%] w-px h-10 connector-line"></div>
+                        <div class="absolute top-0 left-[62.5%] w-px h-10 connector-line"></div>
+
+                        <!-- Operational Manager vertical drop (straight down to Column 4 center) -->
+                        <div class="absolute top-0 left-[87.5%] w-px h-10 connector-line"></div>
+                    </div>
+                </div>
+
+                <!-- Lower Portfolios & Operations Columns (Spacing offset mt-10 accounts for connector drop) -->
+                <div class="w-[85%] flex justify-between items-start gap-3 mt-10">
+                    
+                    <!-- Column 1: A Convener (under General Convener) -->
+                    <div class="flex flex-col items-center w-1/4 bg-slate-100/60 p-4 rounded-2xl border border-slate-200/50 shadow-sm category-collapsible" id="sect-portfolioa">
+                        <div class="w-full flex items-center justify-between gap-2 py-2.5 bg-amber-500 text-white rounded-xl font-black text-[11px] uppercase shadow-md mb-4 tracking-wider">
+                            <span>Convener (Developmental Affairs)</span>
+                            <button onclick="toggleCategorySection('sect-portfolioa')" class="category-toggle-btn" title="Show/hide category">Hide</button>
+                        </div>
+                        <div class="w-full space-y-2 category-body" id="deskListA"></div>
+                        <button onclick="addNewPortfolio('a')" class="admin-btn mt-3 w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center font-bold text-base shadow-sm relative !static hover:scale-110 transition-all">+</button>
+                    </div>
+                    
+                    <!-- Column 2: B Convener (under General Convener) -->
+                    <div class="flex flex-col items-center w-1/4 bg-slate-100/60 p-4 rounded-2xl border border-slate-200/50 shadow-sm category-collapsible" id="sect-portfoliob">
+                        <div class="w-full flex items-center justify-between gap-3 py-2.5 bg-emerald-500 text-white rounded-xl font-black text-[11px] uppercase shadow-md mb-4 tracking-wider">
+                            <span>Convener (General Affairs)</span>
+                            <button onclick="toggleCategorySection('sect-portfoliob')" class="category-toggle-btn" title="Show/hide category">Hide</button>
+                        </div>
+                        <div class="w-full space-y-2 category-body" id="deskListB"></div>
+                        <button onclick="addNewPortfolio('b')" class="admin-btn mt-3 w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center font-bold text-base shadow-sm relative !static hover:scale-110 transition-all">+</button>
+                    </div>
+                    
+                    <!-- Column 3: Organization Convener (C) (under General Convener) -->
+                    <div class="flex flex-col items-center w-1/4 bg-slate-100/60 p-4 rounded-2xl border border-slate-200/50 shadow-sm category-collapsible" id="sect-portfolioc">
+                        <div class="w-full flex items-center justify-between gap-3 py-2.5 bg-indigo-500 text-white rounded-xl font-black text-[11px] uppercase shadow-md mb-4 tracking-wider">
+                            <span>Convener (Organizational Affairs)</span>
+                            <button onclick="toggleCategorySection('sect-portfolioc')" class="category-toggle-btn" title="Show/hide category">Hide</button>
+                        </div>
+                        <div class="w-full space-y-2 category-body" id="deskListC"></div>
+                        <button onclick="addNewPortfolio('c')" class="admin-btn mt-3 w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-base shadow-sm relative !static hover:scale-110 transition-all">+</button>
+                    </div>
+
+                    <!-- Column 4: Office Operations (under Operational Manager) -->
+                    <div class="flex flex-col items-center w-1/4 bg-slate-100/60 p-4 rounded-2xl border border-slate-200/50 shadow-sm category-collapsible" id="sect-officeops">
+                        <div class="w-full flex items-center justify-between gap-3 py-2.5 bg-slate-900 text-white rounded-xl font-black text-[11px] uppercase shadow-md mb-4 tracking-wider">
+                            <span>Office Operation (Op. Manager)</span>
+                            <button onclick="toggleCategorySection('sect-officeops')" class="category-toggle-btn" title="Show/hide category">Hide</button>
+                        </div>
+                        <div class="space-y-2 w-full category-body" id="deskOpOffs"></div>
+                        <button onclick="addNewOpOfficer()" class="admin-btn mt-3 w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-base shadow-sm relative !static hover:scale-110 transition-all">+</button>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Central Directorate Grid Block -->
+            <div class="desktop-only mt-28 w-full flex flex-col items-center">
+                <div class="w-px h-12 connector-line"></div>
+                <div class="w-[450px] p-6 bg-slate-900 text-white rounded-[1.5rem] text-center shadow-xl font-extrabold text-base uppercase tracking-[0.2em] border-b-4 border-indigo-500">
+                    Central Directorate
+                </div>
+                <div class="w-px h-10 connector-line"></div>
+                
+                <!-- Main dynamic directorate grid -->
+                <div class="grid grid-cols-3 gap-x-8 gap-y-10 w-[1300px] mt-4" id="directorateListDesk"></div>
+                
+                <!-- Admin control to add parent Directorate Card -->
+                <button onclick="addNewDirectorate()" class="admin-btn mt-8 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full font-bold text-xs uppercase tracking-wider shadow-md relative !static flex items-center gap-1.5 transition-all">
+                    <span>+ Add Directorate Cluster</span>
+                </button>
+            </div>
+
+            <!-- Central Directorate - Detailed Structure Section -->
+            <div class="desktop-only mt-32 w-full flex flex-col items-center px-4">
+                <div class="w-px h-12 connector-line"></div>
+                <div class="w-full max-w-6xl p-8 bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-2xl text-center shadow-xl font-extrabold text-lg uppercase tracking-[0.2em] border-b-4 border-emerald-500 mb-8">
+                    Complete Central Directorate Structure
+                </div>
+                
+                <!-- Detailed Directorates List with Full Hierarchy -->
+                <div id="detailedDirectoratesContainer" class="w-full max-w-6xl space-y-4"></div>
+            </div>
+
+            <!-- Mobile View (Full Stack Workflow) -->
+            <div class="mobile-only w-full px-2" id="mobileCont"></div>
+        </div>
+    </div>
+
+    <!-- Notification system instead of Alerts -->
+    <div id="toast" class="fixed bottom-6 right-6 bg-slate-900 text-white text-xs font-bold px-4 py-3 rounded-xl shadow-2xl translate-y-20 opacity-0 transition-all duration-300 z-[200] pointer-events-none flex items-center gap-2">
+        <span id="toastMsg"></span>
+    </div>
+
+    <!-- Export/Import Modal -->
+    <div id="importExportModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[150] hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-100 flex flex-col">
+            <h3 class="text-base font-bold text-slate-900 mb-2">Export Configuration Data</h3>
+            <p class="text-xs text-slate-500 mb-4">Copy this JSON and save it. You can paste it back to restore this exact configuration state at any time.</p>
+            <textarea id="jsonArea" class="w-full h-64 p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-[11px] text-slate-700 resize-none focus:outline-indigo-500 mb-4" readonly></textarea>
+            <div class="flex justify-end gap-2">
+                <button onclick="closeJSONModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold">Close</button>
+                <button onclick="copyJSONToClipboard()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold">Copy to Clipboard</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isEditMode = false;
+        let isZoomedOut = true;
+        let orgTitle = "PRISM Foundation";
+        let isDashboardOpen = false;
+
+        // Preloaded complete dataset
+        let hierarchyData = [
+            { id: 1, role: 'Chairman', rel: 'reports to', color: 'bg-white text-emerald-600 border-emerald-100', shape: 'rounded-full' },
+            { id: 2, role: 'Rector', rel: 'oversees', color: 'bg-white text-amber-600 border-amber-100', shape: 'rounded-2xl' },
+            { id: 3, role: 'Advisory Board', rel: 'guides', color: 'bg-white text-slate-600 border-slate-200', shape: 'rounded-2xl' },
+            { id: 4, role: 'Prism Foundation', rel: 'manages', color: 'bg-indigo-600 text-white border-indigo-700', shape: 'rounded-2xl' },
+            { id: 5, role: 'Central Cabinet', rel: '', color: 'bg-slate-900 text-white border-slate-950', shape: 'rounded-full' }
+        ];
+
+        let teamsData = {
+            a: ["Directorate of Civil Sector Service", "Directorate of Academic Research", "Directorate of Global Islamic Leaders", "Directorate of Responsible Professionals", "Directorate of Community Development", "Directorate of Science & Technology"],
+            b: ["Directorate of Prism She & Kids", "Directorate of Spiritual & Welfare Affairs", "Directorate of Finance & Business Development", "Directorate of Legal & Policy Affairs", "Directorate of Media & Public Relations", "Directorate of Human Resource & Recruitment"],
+            c: ["Region & Chapters", "Batch Coordinators", "Rabbani & Gulsthanis", "Alumni NGO's"]
+        };
+
+        const collapsedSections = {};
+
+        let opOfficers = ["Cluster Officer", "Media Officer", "Finance Officer", "Fund Raising Coordinator"];
+
+        let directoratesData = [
+            { id: 101, head: "Responsible Professionals", chairman: "jamal Nurani", convener: "jasim Nurani", coordinator: "Sinan", subs: ["Administration", "Accounting", "School Teaching", "IT Sector", "Counseling & Training", "Translation"] },
+            { id: 102, head: "Global Islamic Leaders", chairman: "Shihab Nurani", convener: "Habeeb Nurnai", coordinator: "Habeeb", subs: ["Thafseer Cluster", "Hadith Cluster", "Fiqh Cluster", "Aqeeda Cluster", "Tasawuf Cluster"] },
+            { id: 103, head: "Civil Service", chairman: "Habeeb Nurani Vellamunda", convener: "Shafi Nurani Omassery", coordinator: "Sinan", subs: ["International Civil Service", "UPSC", "(PSC, SSC, RRB, KAS)"] },
+            { id: 104, head: "Academic Research and Developments", chairman: "Roshan Nurnai", convener: "Khaleel Nurani", coordinator: "Vasil", subs: ["English Cluster", "Arabic Cluster", "Urdu Cluster", "Sociology Cluster", "History Cluster", "Psychology Cluster", "Economics Cluster", "Foreign Language Cluster"] },
+            { id: 105, head: "Science and Technology", chairman: "Faizal Nurani", convener: "Shabeer Nurani", coordinator: "Rasheed", subs: ["Medicine", "Civil Engineering & Architecture", "General Engineering", "Math's", "Chemistry", "Zoology", "Physics", "Botany"] },
+            { id: 106, head: "Passionate Community Developers", chairman: "Marzook Nurani", convener: "Shareef Nurani", coordinator: "Habeeb Nurani", subs: ["Communinity development Cluster"] },
+            { id: 107, head: "Finance & Business Developments", chairman: "Shafeeq Nurani", convener: "Jalal Nurnai", coordinator: "Marzooq Nurani", subs: ["Entrepreneurship Cluster", "Accounting Cl   uster"] },
+            { id: 108, head: "Media and Publications", chairman: "Mubashir Nurani", convener: "Raheem Nurani", coordinator: "Al Ameen Nurani", subs: ["Media Cluster"] },
+            { id: 109, head: "Legal & Policy Affairs", chairman: "Adv. Shamseer Nurani", convener: "Adv. Firdous Nurani", coordinator: "Marzooq Nurani", subs: ["Law Cluster"] },
+            { id: 110, head: "Spiritual & Welfare Affairs", chairman: "Sayyid Ubaid Nurnai", convener: "Sayyid Hashim Nurnai", coordinator: "Marzooq Nurani", subs: ["Spiritual Cluster"] },
+            { id: 111, head: "Human Resources & Recruitment", chairman: "Irshad Nurani", convener: "Anish Nurnai", coordinator: "Shamveel Nurani", subs: [] }
+        ];
+
+        function init() { 
+            renderAll(); 
+            handleResize(); 
+            calculateStats();
+        }
+
+        function calculateStats() {
+            document.getElementById('statCore').innerText = hierarchyData.length + 5; // adding fixed executives
+            const totalPort = teamsData.a.length + teamsData.b.length + teamsData.c.length + opOfficers.length;
+            document.getElementById('statPortfolios').innerText = totalPort;
+            document.getElementById('statClusters').innerText = directoratesData.length;
+            
+            let totalSubs = 0;
+            directoratesData.forEach(d => totalSubs += d.subs.length);
+            document.getElementById('statSubs').innerText = totalSubs;
+        }
+
+        function toggleDashboard() {
+            isDashboardOpen = !isDashboardOpen;
+            const panel = document.getElementById('statsPanel');
+            if (isDashboardOpen) {
+                calculateStats();
+                panel.classList.remove('translate-x-full');
+            } else {
+                panel.classList.add('translate-x-full');
+            }
+        }
+
+        function renderAll() {
+            renderTopChain();
+            renderOpOfficers();
+            renderPortfolios();
+            renderDirectorates();
+            renderDetailedDirectorates();
+            renderMobile();
+            calculateStats();
+            updateAllCategoryVisibility();
+        }
+
+        // Custom non-blocking Toast feedback
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').innerText = message;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        function saveTitle(val) {
+            orgTitle = val;
+            const mobileTitle = document.getElementById('mobTitle');
+            if (mobileTitle) mobileTitle.innerText = val;
+        }
+
+        function renderTopChain() {
+            const container = document.getElementById('topChain');
+            container.innerHTML = '';
+            hierarchyData.forEach((node, i) => {
+                const nodeEl = document.createElement('div');
+                nodeEl.className = `w-full lg:w-[28rem] p-4 border shadow-sm text-center relative ${node.shape} ${node.color} font-black text-xs uppercase tracking-widest transition-all core-chain-node`;
+                nodeEl.id = `corenode-${node.id || i}`;
+                
+                const span = document.createElement('span');
+                span.contentEditable = isEditMode;
+                span.innerText = node.role;
+                span.oninput = (e) => { node.role = e.target.innerText; };
+                nodeEl.appendChild(span);
+
+                // Delete node capability if customized
+                if (hierarchyData.length > 1) {
+                    const del = document.createElement('button'); 
+                    del.className = "admin-btn delete-btn"; 
+                    del.innerHTML = "&times;"; 
+                    del.onclick = () => { 
+                        hierarchyData.splice(i, 1); 
+                        renderAll(); 
+                    };
+                    nodeEl.appendChild(del);
+                }
+
+                container.appendChild(nodeEl);
+                if (node.rel) {
+                    const connector = document.createElement('div');
+                    connector.className = "flex flex-col items-center py-1.5";
+                    connector.innerHTML = `<span class="text-[8px] font-black text-slate-400 uppercase bg-white border border-slate-100 px-2.5 py-0.5 rounded-full mb-[-8px] z-10">${node.rel}</span><div class="w-px h-8 connector-line"></div>`;
+                    container.appendChild(connector);
+                }
+            });
+
+            // If edit mode, append option to insert intermediate management link
+            if (isEditMode) {
+                const addNodeBtn = document.createElement('button');
+                addNodeBtn.className = "mt-4 text-[9px] bg-indigo-50 border border-indigo-200 text-indigo-700 px-3 py-1.5 rounded-full font-bold uppercase hover:bg-indigo-100 transition-all";
+                addNodeBtn.innerText = "+ Add Core Node";
+                addNodeBtn.onclick = () => {
+                    const insertIndex = hierarchyData.length - 1;
+                    hierarchyData.splice(insertIndex, 0, {
+                        id: Date.now(),
+                        role: 'New Core Node',
+                        rel: 'coordinates with',
+                        color: 'bg-white text-slate-700 border-slate-200',
+                        shape: 'rounded-xl'
+                    });
+                    // make sure last node doesn't have an orphan rel
+                    hierarchyData[hierarchyData.length - 1].rel = '';
+                    renderAll();
+                };
+                container.appendChild(addNodeBtn);
+            }
+        }
+
+        function renderOpOfficers() {
+            const desk = document.getElementById('deskOpOffs');
+            desk.innerHTML = '';
+            opOfficers.forEach((off, i) => { 
+                const item = createItem(off, () => { 
+                    opOfficers.splice(i, 1); 
+                    renderAll(); 
+                }, (v) => opOfficers[i] = v, "p-2.5 bg-white border border-slate-200 rounded-lg text-[10px] font-semibold uppercase text-center shadow-sm relative mb-2 block text-slate-700 search-target-node");
+                item.setAttribute('data-search-text', off);
+                desk.appendChild(item); 
+            });
+        }
+
+        function addNewOpOfficer() {
+            opOfficers.push("New Officer Role");
+            renderAll();
+            showToast("Added new operation officer slot");
+        }
+
+        function renderPortfolios() {
+            ['a', 'b', 'c'].forEach(key => {
+                const list = document.getElementById(`deskList${key.toUpperCase()}`);
+                list.innerHTML = '';
+                teamsData[key].forEach((item, i) => { 
+                    const portItem = createItem(item, () => { 
+                        teamsData[key].splice(i, 1); 
+                        renderAll(); 
+                    }, (v) => teamsData[key][i] = v, "portfolio-item text-center font-bold text-slate-600 uppercase search-target-node");
+                    portItem.setAttribute('data-search-text', item);
+                    list.appendChild(portItem); 
+                });
+            });
+        }
+
+        function toggleCategorySection(sectionId) {
+            collapsedSections[sectionId] = !collapsedSections[sectionId];
+            updateSectionVisibility(sectionId);
+        }
+
+        function updateSectionVisibility(sectionId) {
+            const wrapper = document.getElementById(sectionId);
+            if (!wrapper) return;
+            const body = wrapper.querySelector('.category-body');
+            const btn = wrapper.querySelector('.category-toggle-btn');
+            if (!body || !btn) return;
+
+            const collapsed = !!collapsedSections[sectionId];
+            body.classList.toggle('hidden', collapsed);
+            btn.innerText = collapsed ? 'Show' : 'Hide';
+            btn.title = collapsed ? 'Show category items' : 'Hide category items';
+        }
+
+        function updateAllCategoryVisibility() {
+            Object.keys(collapsedSections).forEach(updateSectionVisibility);
+        }
+
+        function addNewPortfolio(key) {
+            teamsData[key].push("New Portfolio Unit");
+            renderAll();
+            showToast(`Added new Convener ${key.toUpperCase()} portfolio item`);
+        }
+
+        function renderDirectorates() {
+            const desk = document.getElementById('directorateListDesk');
+            desk.innerHTML = '';
+            directoratesData.forEach((d, i) => {
+                const card = document.createElement('div');
+                card.className = "flex flex-col bg-slate-50 border border-slate-200/50 p-4 rounded-2xl shadow-sm hover:shadow-md transition-all search-target-node";
+                card.setAttribute('data-search-text', `${d.head} ${d.coordinator || ''} ${d.chairman || ''} ${d.convener || ''}`);
+                
+                const head = document.createElement('div');
+                head.className = "directorate-item border-l-4 border-l-indigo-600 hover:border-l-indigo-500 relative flex flex-col justify-center min-h-[70px]";
+                
+                const titleSpan = document.createElement('span');
+                titleSpan.contentEditable = isEditMode;
+                titleSpan.innerText = d.head;
+                titleSpan.oninput = (e) => { d.head = e.target.innerText; };
+                head.appendChild(titleSpan);
+                
+                const leaders = document.createElement('div');
+                leaders.className = "grid grid-cols-2 gap-3 mt-3 text-[9px] uppercase tracking-[0.12em] text-slate-500";
+                leaders.innerHTML = `
+                    <div class="bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
+                        Chairman: <span contenteditable="${isEditMode}" class="font-bold text-slate-700">${d.chairman || 'Chairman'}</span>
+                    </div>
+                    <div class="bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
+                        Convener: <span contenteditable="${isEditMode}" class="font-bold text-slate-700">${d.convener || 'Convener'}</span>
+                    </div>
+                `;
+                leaders.querySelectorAll('span')[0].oninput = (e) => { d.chairman = e.target.innerText; };
+                leaders.querySelectorAll('span')[1].oninput = (e) => { d.convener = e.target.innerText; };
+                head.appendChild(leaders);
+
+                if (d.coordinator !== undefined) {
+                    const c = document.createElement('div');
+                    c.className = "text-[9px] text-indigo-600 font-bold mt-3";
+                    c.innerHTML = `Office Incharge: <span contenteditable="${isEditMode}">${d.coordinator}</span>`;
+                    c.querySelector('span').oninput = (e) => { d.coordinator = e.target.innerText; };
+                    head.appendChild(c);
+                }
+                
+                const del = document.createElement('button'); 
+                del.className = "admin-btn delete-btn"; 
+                del.innerHTML = "&times;"; 
+                del.onclick = () => { 
+                    directoratesData.splice(i, 1); 
+                    renderAll(); 
+                    showToast("Removed Directorate");
+                };
+                
+                const add = document.createElement('button'); 
+                add.className = "admin-btn add-sub-btn"; 
+                add.innerHTML = "+"; 
+                add.onclick = () => { 
+                    d.subs.push("New Unit Module"); 
+                    renderAll(); 
+                    showToast("Added sub-unit under " + d.head);
+                };
+                
+                head.append(del, add);
+                card.appendChild(head);
+                
+                const subs = document.createElement('div');
+                subs.className = "w-full mt-3 border-l-2 border-slate-200 pl-3 space-y-1.5";
+                
+                card.appendChild(subs);
+                desk.appendChild(card);
+            });
+        }
+
+        function addNewDirectorate() {
+            directoratesData.push({
+                id: Date.now(),
+                head: "New Directorate Cluster",
+                chairman: "Chairman",
+                convener: "Convener",
+                coordinator: "Coordinator Name",
+                subs: ["Unit 1", "Unit 2"]
+            });
+            renderAll();
+            showToast("Added dynamic Directorate entry. Use Edit Mode to rename.");
+        }
+
+        function renderDetailedDirectorates() {
+            const container = document.getElementById('detailedDirectoratesContainer');
+            if (!container) return;
+            container.innerHTML = '';
+            
+            directoratesData.forEach((d, i) => {
+                const row = document.createElement('div');
+                row.className = "bg-white border border-slate-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-all";
+                
+                // Header with main directorate info
+                const header = document.createElement('div');
+                header.className = "flex flex-col gap-4 mb-4";
+                
+                const mainTitle = document.createElement('div');
+                mainTitle.className = "text-lg font-black text-slate-900 uppercase tracking-wider";
+                mainTitle.innerText = d.head;
+                header.appendChild(mainTitle);
+                
+                // Info grid
+                const infoGrid = document.createElement('div');
+                infoGrid.className = "grid grid-cols-4 gap-4 text-sm";
+                
+                const chairmanDiv = document.createElement('div');
+                chairmanDiv.className = "p-3 bg-blue-50 rounded-lg border border-blue-100";
+                chairmanDiv.innerHTML = `<div class="text-[10px] font-bold text-blue-600 uppercase">Chairman</div><div class="text-[12px] font-bold text-slate-700 mt-1">${d.chairman || '---'}</div>`;
+                infoGrid.appendChild(chairmanDiv);
+                
+                const convenerDiv = document.createElement('div');
+                convenerDiv.className = "p-3 bg-green-50 rounded-lg border border-green-100";
+                convenerDiv.innerHTML = `<div class="text-[10px] font-bold text-green-600 uppercase">Convener</div><div class="text-[12px] font-bold text-slate-700 mt-1">${d.convener || '---'}</div>`;
+                infoGrid.appendChild(convenerDiv);
+                
+                const coordinatorDiv = document.createElement('div');
+                coordinatorDiv.className = "p-3 bg-purple-50 rounded-lg border border-purple-100";
+                coordinatorDiv.innerHTML = `<div class="text-[10px] font-bold text-purple-600 uppercase">Office Incharge</div><div class="text-[12px] font-bold text-slate-700 mt-1">${d.coordinator || '---'}</div>`;
+                infoGrid.appendChild(coordinatorDiv);
+                
+                const countDiv = document.createElement('div');
+                countDiv.className = "p-3 bg-amber-50 rounded-lg border border-amber-100";
+                countDiv.innerHTML = `<div class="text-[10px] font-bold text-amber-600 uppercase">Sub-Depts</div><div class="text-[12px] font-bold text-slate-700 mt-1">${d.subs.length}</div>`;
+                infoGrid.appendChild(countDiv);
+                
+                header.appendChild(infoGrid);
+                row.appendChild(header);
+                
+                // Sub-departments
+                if (d.subs && d.subs.length > 0) {
+                    const subsDiv = document.createElement('div');
+                    subsDiv.className = "mt-4 pt-4 border-t border-slate-200";
+                    subsDiv.innerHTML = `<div class="text-[10px] font-black text-slate-500 uppercase mb-3">Sub-Departments / Clusters</div>`;
+                    
+                    const subsList = document.createElement('div');
+                    subsList.className = "grid grid-cols-2 md:grid-cols-3 gap-2";
+                    
+                    d.subs.forEach(sub => {
+                        const badge = document.createElement('div');
+                        badge.className = "bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-[11px] font-semibold text-slate-700 uppercase";
+                        badge.innerText = sub;
+                        subsList.appendChild(badge);
+                    });
+                    
+                    subsDiv.appendChild(subsList);
+                    row.appendChild(subsDiv);
+                }
+                
+                container.appendChild(row);
+            });
+        }
+
+        function createItem(text, delFn, inputFn, cls) {
+            const div = document.createElement('div'); 
+            div.className = cls;
+            
+            const s = document.createElement('span'); 
+            s.contentEditable = isEditMode; 
+            s.className = "w-full block"; 
+            s.innerText = text; 
+            s.oninput = (e) => { inputFn(e.target.innerText); };
+            
+            const del = document.createElement('button'); 
+            del.className = "admin-btn delete-btn"; 
+            del.innerHTML = "&times;"; 
+            del.onclick = (e) => { 
+                e.stopPropagation(); 
+                delFn(); 
+            };
+            
+            div.append(s, del); 
+            return div;
+        }
+
+        function handleSearch(query) {
+            const lowerQuery = query.toLowerCase().trim();
+            const allSearchNodes = document.querySelectorAll('.search-target-node, .core-chain-node');
+            
+            if (!lowerQuery) {
+                allSearchNodes.forEach(node => {
+                    node.classList.remove('highlight-node', 'fade-node');
+                });
+                return;
+            }
+
+            allSearchNodes.forEach(node => {
+                let text = "";
+                if (node.classList.contains('core-chain-node')) {
+                    text = node.innerText;
+                } else {
+                    text = node.getAttribute('data-search-text') || "";
+                }
+                
+                if (text.toLowerCase().includes(lowerQuery)) {
+                    node.classList.add('highlight-node');
+                    node.classList.remove('fade-node');
+                } else {
+                    node.classList.remove('highlight-node');
+                    node.classList.add('fade-node');
+                }
+            });
+        }
+
+        function renderMobile() {
+            const cont = document.getElementById('mobileCont');
+            cont.innerHTML = `
+                <div class="w-px h-10 bg-slate-300 mx-auto"></div>
+                <div class="space-y-3">
+                    <div class="bg-emerald-50 border border-emerald-100 p-4 rounded-xl text-center font-extrabold text-xs uppercase text-emerald-800">
+                        Chairman & Vice Chairman
+                    </div>
+                    <div class="bg-amber-50 border border-amber-100 p-4 rounded-xl text-center font-extrabold text-xs uppercase text-amber-800">
+                        General Convener
+                    </div>
+                    <div class="bg-sky-50 border border-sky-100 p-4 rounded-xl text-center font-extrabold text-xs uppercase text-sky-800">
+                        Finance Convener
+                    </div>
+                    <div class="bg-indigo-600 p-4 rounded-xl text-center font-extrabold text-xs uppercase text-white shadow-md">
+                        Operational Manager
+                    </div>
+                </div>
+                
+                <div class="mt-10 space-y-6">
+                    <div class="border-t border-slate-200 pt-6">
+                        <h3 class="text-[10px] font-black text-slate-400 uppercase text-center tracking-widest mb-4">Portfolio Units</h3>
+                    </div>
+                    ${Object.entries(teamsData).map(([key, list]) => {
+                        let headerLabel = "";
+                        if (key === 'a') headerLabel = "Convener (Developmental Affairs)";
+                        else if (key === 'b') headerLabel = "Convener (General Affairs)";
+                        else if (key === 'c') headerLabel = "Convener (Organizational Affairs)";
+                        
+                        return `
+                        <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm category-collapsible" id="mobile-cat-${key}">
+                            <div class="flex items-center justify-between mb-3 gap-3">
+                                <div class="font-black text-[9px] uppercase text-indigo-600">${headerLabel}</div>
+                                <button onclick="toggleCategorySection('mobile-cat-${key}')" class="category-toggle-btn" title="Show/hide category">Hide</button>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 category-body">${list.map(i => `<div class="bg-slate-50 p-2 rounded-lg text-[9px] font-bold text-slate-600 uppercase border border-slate-100">${i}</div>`).join('')}</div>
+                        </div>
+                        `;
+                    }).join('')}
+                    
+                    <!-- Mobile Operational Manager Section -->
+                    <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm category-collapsible" id="mobile-officeops">
+                        <div class="flex items-center justify-between mb-3 gap-3">
+                            <div class="font-black text-[9px] uppercase text-slate-900">Office Operation (Operational Manager)</div>
+                            <button onclick="toggleCategorySection('mobile-officeops')" class="category-toggle-btn" title="Show/hide category">Hide</button>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 category-body">
+                            ${opOfficers.map(i => `<div class="bg-slate-50 p-2 rounded-lg text-[9px] font-bold text-slate-600 uppercase border border-slate-100">${i}</div>`).join('')}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-12 text-center">
+                    <div class="bg-slate-900 text-white p-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-md">Central Directorate</div>
+                </div>
+                <div class="mt-6 space-y-4">
+                    ${directoratesData.map(d => `
+                        <div class="bg-white p-4 rounded-2xl border border-slate-100">
+                            <div class="flex justify-between items-start mb-2.5">
+                                <div class="font-extrabold text-[10px] uppercase text-slate-800 leading-tight pr-4">${d.head}</div>
+                                ${d.coordinator ? `<div class="text-[8px] font-bold bg-indigo-50 text-indigo-600 px-2 py-1 rounded-md uppercase">${d.coordinator}</div>` : ''}
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 mb-2">
+                                <div class="text-[8px] font-semibold bg-slate-50 text-slate-600 px-2 py-1 rounded uppercase border border-slate-100">Chairman: ${d.chairman || 'Chairman'}</div>
+                                <div class="text-[8px] font-semibold bg-slate-50 text-slate-600 px-2 py-1 rounded uppercase border border-slate-100">Convener: ${d.convener || 'Convener'}</div>
+                            </div>
+                            <div class="flex flex-wrap gap-1">${d.subs.map(s => `<span class="text-[8px] bg-slate-50 text-slate-500 px-2 py-1 rounded uppercase font-semibold border border-slate-100">${s}</span>`).join('')}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function toggleEditMode() {
+            isEditMode = !isEditMode;
+            document.getElementById('editText').innerText = isEditMode ? 'View Mode' : 'Edit Mode';
+            
+            const btn = document.getElementById('editBtn');
+            const icon = document.getElementById('editIcon');
+            
+            if (isEditMode) {
+                btn.classList.replace('bg-indigo-600', 'bg-emerald-600');
+                btn.classList.replace('hover:bg-indigo-700', 'hover:bg-emerald-700');
+                icon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>`;
+                showToast("Edit mode active. Click any dashed box to change values.");
+            } else {
+                btn.classList.replace('bg-emerald-600', 'bg-indigo-600');
+                btn.classList.replace('hover:bg-emerald-700', 'hover:bg-indigo-700');
+                icon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>`;
+                showToast("View mode updated & saved!");
+            }
+            
+            document.body.classList.toggle('edit-mode', isEditMode);
+            renderAll();
+        }
+
+        function toggleZoom() {
+            isZoomedOut = !isZoomedOut;
+            document.getElementById('mainContainer').classList.toggle('zoom-out', isZoomedOut);
+            document.getElementById('mainContainer').classList.toggle('zoom-in', !isZoomedOut);
+            document.getElementById('zoomText').innerText = isZoomedOut ? 'Full View' : 'Minimize';
+        }
+
+        function handleResize() {
+            if (window.innerWidth <= 1250) {
+                document.getElementById('mainContainer').classList.remove('zoom-out');
+            } else if (isZoomedOut) {
+                document.getElementById('mainContainer').classList.add('zoom-out');
+            }
+        }
+
+        /* Portable State Logic (Export/Import JSON) */
+        function exportData() {
+            const currentConfig = {
+                orgTitle,
+                hierarchyData,
+                teamsData,
+                opOfficers,
+                directoratesData
+            };
+            document.getElementById('jsonArea').value = JSON.stringify(currentConfig, null, 2);
+            document.getElementById('importExportModal').classList.replace('hidden', 'flex');
+        }
+
+        function closeJSONModal() {
+            document.getElementById('importExportModal').classList.replace('flex', 'hidden');
+        }
+
+        function copyJSONToClipboard() {
+            const copyText = document.getElementById("jsonArea");
+            copyText.select();
+            document.execCommand('copy');
+            showToast("Configuration copied to clipboard successfully!");
+            closeJSONModal();
+        }
+
+        function triggerImport() {
+            document.getElementById('importInput').click();
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (imported.hierarchyData && imported.teamsData && imported.directoratesData) {
+                        orgTitle = imported.orgTitle || "PRISM Foundation";
+                        hierarchyData = imported.hierarchyData;
+                        teamsData = imported.teamsData;
+                        opOfficers = imported.opOfficers || [];
+                        directoratesData = imported.directoratesData;
+                        
+                        document.getElementById('orgTitle').innerText = orgTitle;
+                        renderAll();
+                        showToast("Organogram database imported successfully!");
+                    } else {
+                        showToast("Failed to parse structure! Invalid file schema.");
+                    }
+                } catch (err) {
+                    showToast("Error processing file format.");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        init();
+        window.addEventListener('resize', handleResize);
+    </script>
+</body>
+</html>
